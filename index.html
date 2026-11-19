@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Live Benchmark Runbook</title>
+<meta name="description" content="Build a small model benchmark live: the same messy hiring-pipeline CSV, three Claude models, scored by code.">
+<style>
+:root {
+  --bg: #fbfaf7; --fg: #1d1c1a; --mut: #6f6b63; --rule: #dcd8cd; --sunk: #f0ede4;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #171716; --fg: #ece9e0; --mut: #9a958a; --rule: #33312c; --sunk: #22211e; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.4 var(--font); padding: 14px max(16px, env(safe-area-inset-left, 0px)) 24px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; padding-bottom: 10px; border-bottom: 2px solid var(--fg); }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; }
+#prog { font-variant-numeric: tabular-nums; font-weight: 600; }
+.tog { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--mut); cursor: pointer; }
+.btn { font: inherit; font-size: 14px; color: var(--fg); background: transparent; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 12px; cursor: pointer; }
+.btn:hover { border-color: var(--mut); }
+.btn:focus-visible, input:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.btn.go { background: var(--fg); color: var(--bg); border-color: var(--fg); font-weight: 600; min-width: 84px; }
+.steps { list-style: none; margin: 0; padding: 0; }
+@media (min-width: 1000px) { .steps { columns: 2; column-gap: 40px; } }
+.steps > li { break-inside: avoid; display: grid; grid-template-columns: 24px 1fr auto; gap: 2px 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.steps input[type=checkbox] { width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--fg); cursor: pointer; }
+.t { font-weight: 600; }
+.t .n { color: var(--mut); font-weight: 500; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.t .time { color: var(--mut); font-weight: 400; font-size: 13.5px; margin-left: 8px; }
+.note { grid-column: 2; font-size: 14.5px; color: var(--mut); }
+code { font-family: var(--mono); font-size: 13px; color: var(--fg); background: var(--sunk); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+.acts { grid-column: 3; grid-row: 1 / span 2; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.full { display: none; grid-column: 2 / -1; margin: 6px 0 0; }
+.show .full { display: block; }
+.full b { display: block; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); margin-bottom: 2px; }
+.full pre { margin: 0; padding: 8px 10px; background: var(--sunk); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; border-radius: 4px; }
+li.done .t { color: var(--mut); text-decoration: line-through; }
+li.done .note { opacity: 0.6; }
+.foot { margin: 12px 0 0; font-size: 13.5px; color: var(--mut); }
+.tabs { display: flex; gap: 4px; margin-right: auto; }
+.tabbtn { font: inherit; font-size: 15px; color: var(--mut); background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 4px 10px; cursor: pointer; }
+.tabbtn[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); font-weight: 600; }
+.tabbtn:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+#app:not([data-tab="runbook"]) .rb-only { display: none; }
+.about { max-width: 640px; padding-top: 6px; }
+.about .lead { font-size: 19px; line-height: 1.5; padding-bottom: 14px; border-bottom: 1px solid var(--rule); margin: 12px 0 0; }
+.about h2 { font-size: 22px; line-height: 1.25; margin: 20px 0 6px; }
+.about h3 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mut); margin: 26px 0 6px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.about p { margin: 8px 0; font-size: 17px; line-height: 1.5; }
+.about ol, .about ul { margin: 8px 0; padding-left: 22px; font-size: 17px; line-height: 1.5; }
+.about li { margin: 6px 0; }
+.about li span { color: var(--mut); }
+.sizes { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 10px 0; font-size: 17px; }
+.sizes b { font-weight: 600; }
+.sizes span { color: var(--mut); }
+@media (max-width: 560px) {
+  .steps > li { grid-template-columns: 24px 1fr; }
+  .acts { grid-column: 2; grid-row: auto; justify-content: flex-start; margin-top: 4px; }
+}
+</style></head><body>
+<div id="app">
+<header class="top">
+  <h1>Live Benchmark Runbook</h1>
+  <nav class="tabs" aria-label="Views">
+    <button type="button" class="tabbtn" data-tab="about" aria-selected="true">What this is</button>
+    <button type="button" class="tabbtn" data-tab="runbook" aria-selected="false">Runbook</button>
+  </nav>
+  <span id="prog" class="rb-only">0/10</span>
+  <label class="tog rb-only"><input type="checkbox" id="showtxt"> Show full text</label>
+  <button type="button" class="btn rb-only" id="reset">Reset</button>
+</header>
+
+<div id="tab-about" class="about">
+  <p class="lead">We give Claude Haiku, Sonnet and Opus the same messy hiring-pipeline CSV, with fake candidates, duplicate rows and mixed date formats. We ask each model three questions about it, then score the answers against a key computed by code, with no judge involved. Running each model many times in fresh contexts shows which one is the cheapest that's still reliably right, and how often the cheaper ones slip.</p>
+  <h2>Do you need the biggest model to do recruiting work?</h2>
+  <p>Claude comes in three sizes. Bigger ones cost more and run slower. Today we find out whether the small, cheap one is good enough for a real recruiting task.</p>
+  <div class="sizes">
+    <b>Haiku</b><span>smallest, fastest, cheapest</span>
+    <b>Sonnet</b><span>the middle one</span>
+    <b>Opus</b><span>largest, slowest, most expensive</span>
+    <b>Fable</b><span>the very top of the range. Not in today's test. Do you really need it to write an email?</span>
+  </div>
+
+  <h3>What we will do</h3>
+  <p>Build a small test live, then run it on all three models.</p>
+  <ol>
+    <li><b>Make up a hiring pipeline.</b> <span>60 fake candidates. IDs only, no names. Claude Code writes the program that makes them.</span></li>
+    <li><b>Work out the right answers.</b> <span>Code calculates them from the data. Nobody types them in.</span></li>
+    <li><b>Ask each model three questions.</b> <span>How many candidates are there? Which source has the best offer rate? How many active candidates are stale, meaning stuck in a stage for over 14 days?</span></li>
+    <li><b>Run it 10 times per model.</b> <span>30 runs in all, about 90 seconds. Each run starts from a blank slate, so no run can learn from another.</span></li>
+    <li><b>Score it.</b> <span>A plain match against the answer key. No AI grader, so no opinions.</span></li>
+    <li><b>Do it twice.</b> <span>First on clean data, where every model should do fine. Then on messy data: duplicate rows, blank stages, dates in mixed formats, inconsistent spelling.</span></li>
+  </ol>
+
+  <h3>What we are looking for</h3>
+  <p>The cheapest model that gets every question right every time. If Haiku does that, there is no reason to pay for Opus on this kind of work.</p>
+  <p>The run prints a table with the score, speed and cost per run for each model.</p>
+
+  <h3>What it does not prove</h3>
+  <ul>
+    <li>Ten runs per model is a demo, not proof. Results vary from run to run.</li>
+    <li>Each run goes through Claude Code, which adds its own built-in instructions on top of ours. So the numbers describe the models as run through Claude Code, not the models on their own. All three get the same setup, so the comparison between them is still fair. We do it this way to keep the demo simple. For a real benchmark, call the API directly, so the models get only your prompt and nothing else.</li>
+    <li>It tests one kind of task: counting and filtering pipeline data. Writing and judgment tasks may come out differently.</li>
+    <li>All data is fake. No real candidates anywhere.</li>
+  </ul>
+
+  <h3>What you need</h3>
+  <p>Claude Code installed and signed in, and Python 3. No API key.</p>
+
+  <h3>How long</h3>
+  <p>About 25 minutes of steps. The model run itself is about 90 seconds. Go to the Runbook tab to start.</p>
+</div>
+
+<div id="tab-runbook" hidden>
+<ol class="steps">
+  <li>
+    <input type="checkbox" id="d0" aria-label="Step 0 done">
+    <div class="t"><span class="n">0</span>Check setup<span class="time">2 min</span></div>
+    <div class="note">Claude Code and Python are installed. No API key needed.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="c0">Copy cmd</button></div>
+    <div class="full"><b>Terminal</b><pre id="c0">claude --version
+python3 --version</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d1" aria-label="Step 1 done">
+    <div class="t"><span class="n">1</span>Empty folder, start Claude<span class="time">1 min</span></div>
+    <div class="note">Fresh folder, nothing carried over. Stay in this Claude session from here on. Run commands with <code>!</code> in front.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="c1">Copy cmd</button></div>
+    <div class="full"><b>Terminal</b><pre id="c1">mkdir ~/live-benchmark &amp;&amp; cd ~/live-benchmark
+claude</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d2" aria-label="Step 2 done">
+    <div class="t"><span class="n">2</span>Fake data<span class="time">4 min</span></div>
+    <div class="note">60 fake candidates, IDs only, seeded, date frozen. Check: <code>wc -l data/pipeline.csv</code> shows 61. Show it: <code>! head -15 data/pipeline.csv</code></div>
+    <div class="acts"><button type="button" class="btn go" data-src="p2">Copy prompt</button></div>
+    <div class="full"><b>Paste into Claude Code</b><pre id="p2">Write gen_data.py in Python 3, standard library only. It creates data/pipeline.csv with 60 fake hiring-pipeline candidates. Columns: candidate_id (C-0001 style, no names), role, source, stage, status, applied_date, stage_entered_date. Use 6 stages (Applied, Recruiter Screen, Hiring Manager Screen, Onsite, Offer, Hired), 4 sources, and status Active, Rejected or Hired. Seed the random generator and freeze today's date at 2026-11-18 so the output is identical every run. Then run it.</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d3" aria-label="Step 3 done">
+    <div class="t"><span class="n">3</span>Answer key<span class="time">3 min</span></div>
+    <div class="note">Answers computed by code, never typed. Tie check keeps each answer unique.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="p3">Copy prompt</button></div>
+    <div class="full"><b>Paste into Claude Code</b><pre id="p3">Extend gen_data.py to also write data/answer_key.json, computed from the data and never hand-written. Questions: (1) total candidates, (2) which source has the highest offer rate, where offer rate is candidates at Offer or Hired divided by all candidates from that source, (3) how many Active candidates are stale, where stale means more than 14 days in stage. Assert there is no tie for question 2. Run it and show me the key.</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d4" aria-label="Step 4 done">
+    <div class="t"><span class="n">4</span>Prompt and scorer<span class="time">4 min</span></div>
+    <div class="note">Three questions, strict JSON back, exact-match scoring. No AI judge.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="p4">Copy prompt</button></div>
+    <div class="full"><b>Paste into Claude Code</b><pre id="p4">Write prompt.md. It tells the model to act as a recruiting analyst, treat today as 2026-11-18, defines Active, days in stage, offer rate and stale as in the answer key, asks the three questions, and requires a reply of JSON only in this exact shape: q1_total_candidates, q2_best_offer_rate_source, q3_stale_active_count. Put {{CSV}} at the end where the file contents go. Then write the scoring function: exact match for each question. No LLM judge.</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d5" aria-label="Step 5 done">
+    <div class="t"><span class="n">5</span>Runner<span class="time">5 min</span></div>
+    <div class="note">Headless <code>claude -p</code>, no tools, empty folder per run. Parallel, timeout, one retry.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="p5">Copy prompt</button></div>
+    <div class="full"><b>Paste into Claude Code</b><pre id="p5">Write run_benchmark.py, standard library only. Config lives in models.json: runs_per_model and a list of models (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5). For each model and run, call: claude -p --model &lt;model&gt; --tools "" --no-session-persistence --strict-mcp-config --setting-sources "" --output-format json. Send the prompt on stdin and run it from an empty temporary directory so no context carries over. Parse the JSON reply, score it against data/answer_key.json, and record seconds and total_cost_usd. Run calls in parallel with a --parallel flag (default 6) and a --runs flag. Use a 300-second timeout per call with one retry, and leave failed runs out of the averages. Print a table: model, average score out of 3, pass count per question, average seconds, average cost, errors. Save results/latest.json.</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d6" aria-label="Step 6 done">
+    <div class="t"><span class="n">6</span>Run on clean data<span class="time">1 min</span></div>
+    <div class="note"><code>! python3 run_benchmark.py --runs 1 --parallel 3</code> Clean data. Compare with step 8 after it gets messy.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="c6">Copy cmd</button></div>
+    <div class="full"><b>Terminal</b><pre id="c6">! python3 run_benchmark.py --runs 1 --parallel 3</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d7" aria-label="Step 7 done">
+    <div class="t"><span class="n">7</span>Make the data messy<span class="time">3 min</span></div>
+    <div class="note">Key stays from the clean rows. Before the prompt, save the clean file: <code>! cp data/pipeline.csv data/pipeline_clean.csv</code> After: <code>wc -l data/pipeline.csv</code> shows 68. Show the mess: <code>! head -15 data/pipeline.csv</code></div>
+    <div class="acts"><button type="button" class="btn go" data-src="p7">Copy prompt</button></div>
+    <div class="full"><b>Paste into Claude Code</b><pre id="p7">Make the CSV messy without changing the answer key. After computing the key from the clean rows, corrupt the file: add 4 exact duplicate rows, add 3 rows with a blank stage, write about a quarter of the dates as MM/DD/YYYY and some as "Nov 3, 2026", and vary source capitalization and trailing spaces. Use a separate random generator so the clean data stays identical. Then update prompt.md with rules: count each candidate once, ignore blank-stage rows, dates are month-first in several formats, treat source names case-insensitively. Rerun gen_data.py.</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d8" aria-label="Step 8 done">
+    <div class="t"><span class="n">8</span>Run all three models<span class="time">2 min</span></div>
+    <div class="note"><code>! python3 run_benchmark.py --runs 10 --parallel 6</code> 30 runs took about 90 s in rehearsal. A hung call waits 5 min, then retries.</div>
+    <div class="acts"><button type="button" class="btn go" data-src="c8">Copy cmd</button></div>
+    <div class="full"><b>Terminal</b><pre id="c8">! python3 run_benchmark.py --runs 10 --parallel 6</pre></div>
+  </li>
+
+  <li>
+    <input type="checkbox" id="d9" aria-label="Step 9 done">
+    <div class="t"><span class="n">9</span>Read the table<span class="time">2 min</span></div>
+    <div class="note">Pick the cheapest model that is right every time. Rehearsal: Sonnet and Opus were perfect every time. Haiku missed one question in 2 of 10 runs on the last pass and none in 13 earlier runs. Cost per run was about $0.004, $0.04 and $0.08. Results vary, so say what the table shows. Ten runs per model is a demo, not proof. Headless Claude Code adds its own system prompt, so this is not a raw API test.</div>
+  </li>
+
+  <li>
+    <span></span>
+    <div class="t"><span class="n">!</span>If it breaks</div>
+    <div class="note">Press Ctrl-C if a run hangs, then use the fast run.</div>
+    <div class="acts"><button type="button" class="btn" data-src="b2">Fast run</button></div>
+    <div class="full"><b>Fast run</b><pre id="b2">! python3 run_benchmark.py --runs 1 --parallel 3</pre></div>
+  </li>
+</ol>
+
+<p class="foot">Claude writes different code each time. The prompts hold, the exact output will vary. Ticks are saved in this browser only.</p>
+</div>
+</div>
+
+<script>
+(function () {
+  var KEY = "runbook-public-v1";
+  var app = document.getElementById("app");
+  var boxes = [].slice.call(document.querySelectorAll(".steps input[type=checkbox]"));
+  var state = {};
+  try { state = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { state = {}; }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function paint() {
+    var n = 0;
+    boxes.forEach(function (b) {
+      b.checked = !!state[b.id];
+      if (b.checked) n++;
+      b.closest("li").classList.toggle("done", b.checked);
+    });
+    document.getElementById("prog").textContent = n + "/" + boxes.length;
+  }
+  boxes.forEach(function (b) {
+    b.addEventListener("change", function () { state[b.id] = b.checked; save(); paint(); });
+  });
+  document.getElementById("reset").addEventListener("click", function () { state = {}; save(); paint(); });
+  document.getElementById("showtxt").addEventListener("change", function (e) {
+    app.classList.toggle("show", e.target.checked);
+  });
+  document.querySelectorAll("[data-src]").forEach(function (btn) {
+    var label = btn.textContent;
+    btn.addEventListener("click", function () {
+      var pre = document.getElementById(btn.getAttribute("data-src"));
+      function done() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = label; }, 1400); }
+      function fallback() {
+        app.classList.add("show");
+        var r = document.createRange(); r.selectNodeContents(pre);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        btn.textContent = "Selected: Cmd+C";
+        setTimeout(function () { btn.textContent = label; }, 2500);
+      }
+      try { navigator.clipboard.writeText(pre.textContent).then(done, fallback); } catch (e) { fallback(); }
+    });
+  });
+  paint();
+
+  var panels = { about: document.getElementById("tab-about"), runbook: document.getElementById("tab-runbook") };
+  var btns = [].slice.call(document.querySelectorAll(".tabbtn"));
+  function show(name) {
+    if (!panels[name]) name = "about";
+    app.setAttribute("data-tab", name);
+    Object.keys(panels).forEach(function (k) { panels[k].hidden = k !== name; });
+    btns.forEach(function (b) { b.setAttribute("aria-selected", String(b.getAttribute("data-tab") === name)); });
+  }
+  btns.forEach(function (b) {
+    b.addEventListener("click", function () { var n = b.getAttribute("data-tab"); location.hash = n; show(n); });
+  });
+  window.addEventListener("hashchange", function () { show(location.hash.slice(1)); });
+  show(location.hash.slice(1));
+})();
+</script>
+</body></html>
